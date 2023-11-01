@@ -1,7 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:ftest/firebase_options.dart';
 
-void main() {
-  // 最初に表示するWidget
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
   runApp(const MyTodoApp());
 }
 
@@ -37,17 +45,29 @@ class TodoListPage extends StatefulWidget {
 }
 
 class TodoListPageState extends State<TodoListPage> {
-  // Todoリストのデータ
   List<String> todoList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    todoList.clear();
+    // Firebase Firestoreからデータを取得し、リストに表示
+    FirebaseFirestore.instance.collection('todos')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+          setState(() {
+            todoList = snapshot.docs.map((doc) => doc['text'] as String).toList();
+          });
+        });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBarを表示し、タイトルも設定
       appBar: AppBar(
         title: const Text('リスト一覧'),
       ),
-      // データを元にListViewを作成
       body: ListView.builder(
         itemCount: todoList.length,
         itemBuilder: (context, index) {
@@ -60,18 +80,14 @@ class TodoListPageState extends State<TodoListPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
-          // "push"で新規画面に遷移
-          // リスト追加画面から渡される値を受け取る
-          final newListText = await Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) {
-              // 遷移先の画面としてリスト追加画面を指定
+          final newListText = await showDialog<String>(
+            context: context,
+            builder: (BuildContext context) {
               return const TodoAddPage();
-            }),
+            },
           );
           if (newListText != null) {
-            // キャンセルした場合は newListText が null となるので注意
             setState(() {
-              // リスト追加
               todoList.add(newListText);
             });
           }
@@ -82,6 +98,7 @@ class TodoListPageState extends State<TodoListPage> {
   }
 }
 
+
 class TodoAddPage extends StatefulWidget {
   const TodoAddPage({super.key});
 
@@ -90,10 +107,8 @@ class TodoAddPage extends StatefulWidget {
 }
 
 class TodoAddPageState extends State<TodoAddPage> {
-  // 入力されたテキストをデータとして持つ
   String _text = '';
 
-  // データを元に表示するWidget
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,49 +116,42 @@ class TodoAddPageState extends State<TodoAddPage> {
         title: const Text('リスト追加'),
       ),
       body: Container(
-        // 余白を付ける
         padding: const EdgeInsets.all(64),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            // 入力されたテキストを表示
             Text(_text, style: const TextStyle(color: Colors.blue)),
             const SizedBox(height: 8),
-            // テキスト入力
             TextField(
-              // 入力されたテキストの値を受け取る（valueが入力されたテキスト）
               onChanged: (String value) {
-                // データが変更したことを知らせる（画面を更新する）
                 setState(() {
-                  // データを変更
                   _text = value;
                 });
               },
             ),
             const SizedBox(height: 8),
             SizedBox(
-              // 横幅いっぱいに広げる
               width: double.infinity,
-              // リスト追加ボタン
               child: ElevatedButton(
-                onPressed: () {
-                  // "pop"で前の画面に戻る
-                  // "pop"の引数から前の画面にデータを渡す
-                  Navigator.of(context).pop(_text);
+                onPressed: () async {
+                  final date = FieldValue.serverTimestamp();
+                  final BuildContext dialogContext = context;
+                  await FirebaseFirestore.instance.collection('todos').add({
+                    'text': _text,
+                    'date': date
+                  });
+
+                  Navigator.of(dialogContext).pop();
                 },
                 child: const Text('リスト追加', style: TextStyle(color: Colors.white)),
               ),
             ),
             const SizedBox(height: 8),
             SizedBox(
-              // 横幅いっぱいに広げる
               width: double.infinity,
-              // キャンセルボタン
               child: TextButton(
-                // ボタンをクリックした時の処理
                 onPressed: () {
-                  // "pop"で前の画面に戻る
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(null);
                 },
                 child: const Text('キャンセル'),
               ),
