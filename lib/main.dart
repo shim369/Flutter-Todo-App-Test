@@ -47,6 +47,17 @@ class TodoListPage extends StatefulWidget {
 class TodoListPageState extends State<TodoListPage> {
   List<String> todoList = [];
 
+  void _deleteTodoItem(int index) async {
+    await FirebaseFirestore.instance.collection('todos')
+        .where('text', isEqualTo: todoList[index])
+        .get()
+        .then((QuerySnapshot snapshot) {
+      for (QueryDocumentSnapshot doc in snapshot.docs) {
+        doc.reference.delete();
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +85,13 @@ class TodoListPageState extends State<TodoListPage> {
           return Card(
             child: ListTile(
               title: Text(todoList[index]),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () {
+                  // 削除処理を実行
+                  _deleteTodoItem(index);
+                },
+              ),
             ),
           );
         },
@@ -97,6 +115,7 @@ class TodoListPageState extends State<TodoListPage> {
     );
   }
 }
+
 
 
 class TodoAddPage extends StatefulWidget {
@@ -124,9 +143,9 @@ class TodoAddPageState extends State<TodoAddPage> {
             const SizedBox(height: 8),
             TextField(
               onChanged: (String value) {
-                setState(() {
-                  _text = value;
-                });
+                  setState(() {
+                    _text = value;
+                  });
               },
             ),
             const SizedBox(height: 8),
@@ -135,13 +154,12 @@ class TodoAddPageState extends State<TodoAddPage> {
               child: ElevatedButton(
                 onPressed: () async {
                   final date = FieldValue.serverTimestamp();
-                  final BuildContext dialogContext = context;
                   await FirebaseFirestore.instance.collection('todos').add({
                     'text': _text,
                     'date': date
                   });
-
-                  Navigator.of(dialogContext).pop();
+                  if (!mounted) return;
+                  Navigator.of(context).pop();
                 },
                 child: const Text('リスト追加', style: TextStyle(color: Colors.white)),
               ),
