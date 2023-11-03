@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:ftest/firebase_options.dart';
+import 'package:intl/intl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,24 +20,17 @@ class MyTodoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // 右上に表示される"debug"ラベルを消す
       debugShowCheckedModeBanner: false,
-      // アプリ名
       title: 'My Todo App',
       theme: ThemeData(
-        // テーマカラー
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      // リスト一覧画面を表示
       home: const TodoListPage(),
     );
   }
 }
 
-
-
-// リスト一覧画面用Widget
 class TodoListPage extends StatefulWidget {
   const TodoListPage({super.key});
 
@@ -46,6 +40,8 @@ class TodoListPage extends StatefulWidget {
 
 class TodoListPageState extends State<TodoListPage> {
   List<String> todoList = [];
+  DateTime selectedDate = DateTime.now();
+  QuerySnapshot? todoSnapshot;
 
   void _deleteTodoItem(int index) async {
     await FirebaseFirestore.instance.collection('todos')
@@ -62,15 +58,15 @@ class TodoListPageState extends State<TodoListPage> {
   void initState() {
     super.initState();
     todoList.clear();
-    // Firebase Firestoreからデータを取得し、リストに表示
     FirebaseFirestore.instance.collection('todos')
         .orderBy('date', descending: true)
         .snapshots()
-        .listen((snapshot) {
-          setState(() {
-            todoList = snapshot.docs.map((doc) => doc['text'] as String).toList();
-          });
-        });
+        .listen((QuerySnapshot snapshot) {
+      setState(() {
+        todoSnapshot = snapshot;
+        todoList = snapshot.docs.map((doc) => doc['text'] as String).toList();
+      });
+    });
   }
 
   @override
@@ -85,10 +81,10 @@ class TodoListPageState extends State<TodoListPage> {
           return Card(
             child: ListTile(
               title: Text(todoList[index]),
+              subtitle: Text('期限: ${DateFormat('yyyy-MM-dd').format(todoSnapshot?.docs[index]['deadline'].toDate() ?? DateTime.now())}'),
               trailing: IconButton(
                 icon: const Icon(Icons.delete),
                 onPressed: () {
-                  // 削除処理を実行
                   _deleteTodoItem(index);
                 },
               ),
@@ -116,8 +112,6 @@ class TodoListPageState extends State<TodoListPage> {
   }
 }
 
-
-
 class TodoAddPage extends StatefulWidget {
   const TodoAddPage({super.key});
 
@@ -127,6 +121,23 @@ class TodoAddPage extends StatefulWidget {
 
 class TodoAddPageState extends State<TodoAddPage> {
   String _text = '';
+  DateTime? selectedDate;
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+
+
+    if (picked != null) {
+      setState(() {
+        selectedDate = picked;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -139,13 +150,22 @@ class TodoAddPageState extends State<TodoAddPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            ElevatedButton(
+              onPressed: () {
+                _selectDate(context);
+              },
+              child: const Text('期限を選択'),
+            ),
+            Text(selectedDate != null
+                ? '選択した日付: ${DateFormat('yyyy-MM-dd').format(selectedDate!)}'
+                : '日付未選択'),
             Text(_text, style: const TextStyle(color: Colors.blue)),
             const SizedBox(height: 8),
             TextField(
               onChanged: (String value) {
-                  setState(() {
-                    _text = value;
-                  });
+                setState(() {
+                  _text = value;
+                });
               },
             ),
             const SizedBox(height: 8),
@@ -156,7 +176,8 @@ class TodoAddPageState extends State<TodoAddPage> {
                   final date = FieldValue.serverTimestamp();
                   await FirebaseFirestore.instance.collection('todos').add({
                     'text': _text,
-                    'date': date
+                    'date': date,
+                    'deadline': selectedDate,
                   });
                   if (!mounted) return;
                   Navigator.of(context).pop();
